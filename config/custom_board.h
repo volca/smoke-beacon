@@ -61,16 +61,17 @@ extern "C" {
 
 #define BSP_LED_0      LED_1
 
-#define BUTTONS_NUMBER 1
+#define BUTTONS_NUMBER 2
 
 #define BUTTON_START   2
 #define BUTTON_1       2
-#define BUTTON_STOP    2
+#define BUTTON_2       7
+#define BUTTON_STOP    7
 #define BUTTON_PULL    NRF_GPIO_PIN_PULLUP
 
 #define BUTTONS_ACTIVE_STATE 0
 
-#define BUTTONS_LIST { BUTTON_1 }
+#define BUTTONS_LIST { BUTTON_1, BUTTON_2 }
 
 #define BSP_BUTTON_0   BUTTON_1
 

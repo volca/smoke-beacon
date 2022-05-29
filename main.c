@@ -86,8 +86,9 @@
 #define APP_TIMER_PRESCALER             0                                 /**< Value of the RTC1 PRESCALER register. */
 #define APP_TIMER_OP_QUEUE_SIZE         4                                 /**< Size of timer operation queues. */
 
-#define OFFSET_MAJOR                    18                                /**< Position of the MSB of the Major Value in m_beacon_info array. */
-#define OFFSET_MINOR                    20                                /**< Position of the MSB of the Minor Value in m_beacon_info array. */
+#define ADV_TIMEOUT_TIME                APP_TIMER_TICKS(15000, APP_TIMER_PRESCALER)  
+
+APP_TIMER_DEF(m_adv_tmr);
 
 static ble_gap_adv_params_t m_adv_params;                                 /**< Parameters to be passed to the stack when starting advertising. */
 static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
@@ -211,7 +212,7 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-static void advertising_swap(void) {
+static void advertising_swap(uint8_t idx) {
     uint32_t      err_code;
     ble_advdata_t advdata;
     uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
@@ -220,7 +221,7 @@ static void advertising_swap(void) {
 
     manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
 
-    manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info1;
+    manuf_specific_data.data.p_data = idx ? (uint8_t *)m_beacon_info1 : (uint8_t *) m_beacon_info;
     manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
 
     // Build and set advertising data.
@@ -246,16 +247,23 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
 {
     switch (pin_no)
     {
-        case BUTTON_1:
+        case BUTTON_2:
             if (button_action == APP_BUTTON_RELEASE) {
                 bsp_indication_set(BSP_INDICATE_IDLE);
-                advertising_swap();
+                advertising_swap(1);
+                app_timer_start(m_adv_tmr, ADV_TIMEOUT_TIME, NULL);
             }
             break;
 
         default:
             break;
     }
+}
+
+static void adv_timeout_handler(void * p_context) {
+      UNUSED_PARAMETER(p_context);
+      advertising_swap(0);
+      NRF_LOG_INFO("adv timeout");
 }
 
 /**@brief Function for the Timer initialization.
@@ -266,6 +274,10 @@ static void timers_init(void)
 {
     // Initialize timer module, making it use the scheduler
     APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
+
+    // Create timers.
+    uint32_t err_code = app_timer_create(&m_adv_tmr, APP_TIMER_MODE_SINGLE_SHOT, adv_timeout_handler);
+    APP_ERROR_CHECK(err_code);
 }
 
 /**
@@ -286,7 +298,7 @@ int main(void)
     //The array must be static because a pointer to it will be saved in the button handler module.
     static app_button_cfg_t buttons[] =
     {
-        {BUTTON_1, false, BUTTON_PULL, button_event_handler}
+        {BUTTON_2, false, BUTTON_PULL, button_event_handler}
     };
     err_code = app_button_init(buttons, sizeof(buttons) / sizeof(buttons[0]),
             BUTTON_DETECTION_DELAY);
