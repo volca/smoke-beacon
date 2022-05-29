@@ -73,23 +73,21 @@
 #define APP_ADV_DATA_LENGTH             0x15                              /**< Length of manufacturer specific data in the advertisement. */
 #define APP_DEVICE_TYPE                 0x02                              /**< 0x02 refers to Beacon. */
 #define APP_MEASURED_RSSI               0xC3                              /**< The Beacon's measured RSSI at 1 meter distance in dBm. */
-#define APP_COMPANY_IDENTIFIER          0x0059                            /**< Company identifier for Nordic Semiconductor ASA. as per www.bluetooth.org. */
+#define APP_COMPANY_IDENTIFIER          0x004C                            /**< Company identifier for Apple. as per www.bluetooth.org. */
 #define APP_MAJOR_VALUE                 0x01, 0x02                        /**< Major value used to identify Beacons. */
 #define APP_MINOR_VALUE                 0x03, 0x04                        /**< Minor value used to identify Beacons. */
-#define APP_BEACON_UUID                 0x01, 0x12, 0x23, 0x34, \
-                                        0x45, 0x56, 0x67, 0x78, \
-                                        0x89, 0x9a, 0xab, 0xbc, \
-                                        0xcd, 0xde, 0xef, 0xf0            /**< Proprietary UUID for Beacon. */
+#define APP_BEACON_UUID                 0xFD, 0xA5, 0x06, 0x93, \
+                                        0xA4, 0xE2,0x4F, 0xB1, \
+                                        0xAF, 0xCF, 0xC6, 0xEB, \
+                                        0x07, 0x64, 0x78, 0x25            /**< Proprietary UUID for Beacon. */
 
 #define DEAD_BEEF                       0xDEADBEEF                        /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
 #define APP_TIMER_PRESCALER             0                                 /**< Value of the RTC1 PRESCALER register. */
 #define APP_TIMER_OP_QUEUE_SIZE         4                                 /**< Size of timer operation queues. */
 
-#if defined(USE_UICR_FOR_MAJ_MIN_VALUES)
-#define MAJ_VAL_OFFSET_IN_BEACON_INFO   18                                /**< Position of the MSB of the Major Value in m_beacon_info array. */
-#define UICR_ADDRESS                    0x10001080                        /**< Address of the UICR register used by this example. The major and minor versions to be encoded into the advertising data will be picked up from this location. */
-#endif
+#define OFFSET_MAJOR                    18                                /**< Position of the MSB of the Major Value in m_beacon_info array. */
+#define OFFSET_MINOR                    20                                /**< Position of the MSB of the Minor Value in m_beacon_info array. */
 
 static ble_gap_adv_params_t m_adv_params;                                 /**< Parameters to be passed to the stack when starting advertising. */
 static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
@@ -101,6 +99,19 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
     APP_BEACON_UUID,     // 128 bit UUID value.
     APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
     APP_MINOR_VALUE,     // Minor arbitrary value that can be used to distinguish between Beacons.
+    APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
+                         // this implementation.
+};
+
+static uint8_t m_beacon_info1[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
+{
+    APP_DEVICE_TYPE,     // Manufacturer specific information. Specifies the device type in this
+                         // implementation.
+    APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
+                         // manufacturer specific data in this implementation.
+    APP_BEACON_UUID,     // 128 bit UUID value.
+    APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
+    0x1, 0x0,                 // Minor arbitrary value that can be used to distinguish between Beacons.
     APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
                          // this implementation.
 };
@@ -136,28 +147,6 @@ static void advertising_init(void)
 
     manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
 
-#if defined(USE_UICR_FOR_MAJ_MIN_VALUES)
-    // If USE_UICR_FOR_MAJ_MIN_VALUES is defined, the major and minor values will be read from the
-    // UICR instead of using the default values. The major and minor values obtained from the UICR
-    // are encoded into advertising data in big endian order (MSB First).
-    // To set the UICR used by this example to a desired value, write to the address 0x10001080
-    // using the nrfjprog tool. The command to be used is as follows.
-    // nrfjprog --snr <Segger-chip-Serial-Number> --memwr 0x10001080 --val <your major/minor value>
-    // For example, for a major value and minor value of 0xabcd and 0x0102 respectively, the
-    // the following command should be used.
-    // nrfjprog --snr <Segger-chip-Serial-Number> --memwr 0x10001080 --val 0xabcd0102
-    uint16_t major_value = ((*(uint32_t *)UICR_ADDRESS) & 0xFFFF0000) >> 16;
-    uint16_t minor_value = ((*(uint32_t *)UICR_ADDRESS) & 0x0000FFFF);
-
-    uint8_t index = MAJ_VAL_OFFSET_IN_BEACON_INFO;
-
-    m_beacon_info[index++] = MSB_16(major_value);
-    m_beacon_info[index++] = LSB_16(major_value);
-
-    m_beacon_info[index++] = MSB_16(minor_value);
-    m_beacon_info[index++] = LSB_16(minor_value);
-#endif
-
     manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info;
     manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
 
@@ -180,7 +169,6 @@ static void advertising_init(void)
     m_adv_params.interval    = NON_CONNECTABLE_ADV_INTERVAL;
     m_adv_params.timeout     = APP_CFG_NON_CONN_ADV_TIMEOUT;
 }
-
 
 /**@brief Function for starting advertising.
  */
@@ -223,6 +211,28 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
+static void advertising_swap(void) {
+    uint32_t      err_code;
+    ble_advdata_t advdata;
+    uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
+
+    ble_advdata_manuf_data_t manuf_specific_data;
+
+    manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
+
+    manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info1;
+    manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
+
+    // Build and set advertising data.
+    memset(&advdata, 0, sizeof(advdata));
+
+    advdata.name_type             = BLE_ADVDATA_NO_NAME;
+    advdata.flags                 = flags;
+    advdata.p_manuf_specific_data = &manuf_specific_data;
+
+    err_code = ble_advdata_set(&advdata, NULL);
+    NRF_LOG_INFO("Send button state change. %d\r\n", err_code);
+}
 
 /**@brief Function for doing power management.
  */
@@ -238,8 +248,8 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
     {
         case BUTTON_1:
             if (button_action == APP_BUTTON_RELEASE) {
-                NRF_LOG_INFO("Send button state change.\r\n");
                 bsp_indication_set(BSP_INDICATE_IDLE);
+                advertising_swap();
             }
             break;
 
