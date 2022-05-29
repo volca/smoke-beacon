@@ -251,7 +251,10 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
             if (button_action == APP_BUTTON_RELEASE) {
                 bsp_indication_set(BSP_INDICATE_IDLE);
                 advertising_swap(1);
-                app_timer_start(m_adv_tmr, ADV_TIMEOUT_TIME, NULL);
+                uint32_t err_code = app_timer_stop(m_adv_tmr);
+                APP_ERROR_CHECK(err_code);
+                err_code = app_timer_start(m_adv_tmr, ADV_TIMEOUT_TIME, NULL);
+                APP_ERROR_CHECK(err_code);
             }
             break;
 
