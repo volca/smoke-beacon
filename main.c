@@ -59,6 +59,7 @@
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 
+#define BTN_LONG_PUSH_TIMEOUT           APP_TIMER_TICKS(2000, APP_TIMER_PRESCALER)
 #define APP_TIMER_OP_QUEUE_SIZE         4                                           /**< Size of timer operation que  ues. */
 #define CENTRAL_LINK_COUNT              0                                 /**< Number of central links used by the application. When changing this number remember to adjust the RAM settings*/
 #define PERIPHERAL_LINK_COUNT           0                                 /**< Number of peripheral links used by the application. When changing this number remember to adjust the RAM settings*/
@@ -89,6 +90,7 @@
 #define ADV_TIMEOUT_TIME                APP_TIMER_TICKS(15000, APP_TIMER_PRESCALER)  
 
 APP_TIMER_DEF(m_adv_tmr);
+APP_TIMER_DEF(m_btn_tmr);
 
 static ble_gap_adv_params_t m_adv_params;                                 /**< Parameters to be passed to the stack when starting advertising. */
 static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
@@ -248,12 +250,13 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
     switch (pin_no)
     {
         case BUTTON_2:
-            if (button_action == APP_BUTTON_RELEASE) {
-                bsp_indication_set(BSP_INDICATE_IDLE);
-                advertising_swap(1);
-                uint32_t err_code = app_timer_stop(m_adv_tmr);
-                APP_ERROR_CHECK(err_code);
-                err_code = app_timer_start(m_adv_tmr, ADV_TIMEOUT_TIME, NULL);
+            if (button_action == APP_BUTTON_PUSH) {
+                app_timer_stop(m_btn_tmr);
+                uint32_t err_code = app_timer_start(
+                    m_btn_tmr,
+                    BTN_LONG_PUSH_TIMEOUT,
+                    NULL
+                );
                 APP_ERROR_CHECK(err_code);
             }
             break;
@@ -263,10 +266,26 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
     }
 }
 
+static void on_btn_long_push() {
+    bsp_indication_set(BSP_INDICATE_IDLE);
+    advertising_swap(1);
+    uint32_t err_code = app_timer_stop(m_adv_tmr);
+    APP_ERROR_CHECK(err_code);
+    err_code = app_timer_start(m_adv_tmr, ADV_TIMEOUT_TIME, NULL);
+    APP_ERROR_CHECK(err_code);
+}
+
+static void btn_timeout_handler(void * p_context) {
+    UNUSED_PARAMETER(p_context);
+    on_btn_long_push();
+}
+
 static void adv_timeout_handler(void * p_context) {
-      UNUSED_PARAMETER(p_context);
-      advertising_swap(0);
-      NRF_LOG_INFO("adv timeout");
+    UNUSED_PARAMETER(p_context);
+    advertising_swap(0);
+    NRF_LOG_INFO("adv timeout");
+    uint32_t err_code = bsp_indication_set(BSP_INDICATE_ADVERTISING);
+    APP_ERROR_CHECK(err_code);
 }
 
 /**@brief Function for the Timer initialization.
@@ -280,6 +299,9 @@ static void timers_init(void)
 
     // Create timers.
     uint32_t err_code = app_timer_create(&m_adv_tmr, APP_TIMER_MODE_SINGLE_SHOT, adv_timeout_handler);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_create(&m_btn_tmr, APP_TIMER_MODE_SINGLE_SHOT, btn_timeout_handler);
     APP_ERROR_CHECK(err_code);
 }
 
