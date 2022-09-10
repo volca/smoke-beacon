@@ -89,34 +89,33 @@
 
 #define ADV_TIMEOUT_TIME                APP_TIMER_TICKS(15000, APP_TIMER_PRESCALER)  
 
+#define SERVICE_UUID                    0x181c
+#define SERVICE_DATA_LEN                16
+
 APP_TIMER_DEF(m_adv_tmr);
 APP_TIMER_DEF(m_btn_tmr);
 
 static ble_gap_adv_params_t m_adv_params;                                 /**< Parameters to be passed to the stack when starting advertising. */
-static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
-{
-    APP_DEVICE_TYPE,     // Manufacturer specific information. Specifies the device type in this
-                         // implementation.
-    APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
-                         // manufacturer specific data in this implementation.
-    APP_BEACON_UUID,     // 128 bit UUID value.
-    APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
-    APP_MINOR_VALUE,     // Minor arbitrary value that can be used to distinguish between Beacons.
-    APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
-                         // this implementation.
+
+static uint8_t m_service_data[SERVICE_DATA_LEN];
+
+// We'll put our sensor data inside an advertisement service.
+static ble_advdata_service_data_t m_advdata_service_data = {
+    .service_uuid = SERVICE_UUID,
+    .data = {
+        .p_data = m_service_data,
+        .size = SERVICE_DATA_LEN,
+    }
 };
 
-static uint8_t m_beacon_info1[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
-{
-    APP_DEVICE_TYPE,     // Manufacturer specific information. Specifies the device type in this
-                         // implementation.
-    APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
-                         // manufacturer specific data in this implementation.
-    APP_BEACON_UUID,     // 128 bit UUID value.
-    APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
-    0x1, 0x0,                 // Minor arbitrary value that can be used to distinguish between Beacons.
-    APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
-                         // this implementation.
+// Holds the service data to be broadcasted. The contents of this struct
+// will be encoded into gap_adv_data.
+// Warning: do not update this while advertising.
+static ble_advdata_t m_adv_data = {
+    .name_type = BLE_ADVDATA_FULL_NAME,
+    .flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED,
+    .p_service_data_array = &m_advdata_service_data,
+    .service_data_count = 1,
 };
 
 /**@brief Callback function for asserts in the SoftDevice.
@@ -135,6 +134,17 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
+static void set_service_data_bthome_protocol(uint8_t detected) 
+{
+    // 1. Smoke
+    // uint18_t.
+    m_service_data[0] = 2;
+    // Type - smoke.
+    m_service_data[1] = 0x29;
+    // Value. 1 = detected
+    m_service_data[2] = detected;
+}
+
 /**@brief Function for initializing the Advertising functionality.
  *
  * @details Encodes the required advertising data and passes it to the stack.
@@ -143,24 +153,8 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 static void advertising_init(void)
 {
     uint32_t      err_code;
-    ble_advdata_t advdata;
-    uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
-
-    ble_advdata_manuf_data_t manuf_specific_data;
-
-    manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
-
-    manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info;
-    manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
-
-    // Build and set advertising data.
-    memset(&advdata, 0, sizeof(advdata));
-
-    advdata.name_type             = BLE_ADVDATA_NO_NAME;
-    advdata.flags                 = flags;
-    advdata.p_manuf_specific_data = &manuf_specific_data;
-
-    err_code = ble_advdata_set(&advdata, NULL);
+    set_service_data_bthome_protocol(0);
+    err_code = ble_advdata_set(&m_adv_data, NULL);
     APP_ERROR_CHECK(err_code);
 
     // Initialize advertising parameters (used when starting advertising).
@@ -215,26 +209,8 @@ static void ble_stack_init(void)
 }
 
 static void advertising_swap(uint8_t idx) {
-    uint32_t      err_code;
-    ble_advdata_t advdata;
-    uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
-
-    ble_advdata_manuf_data_t manuf_specific_data;
-
-    manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
-
-    manuf_specific_data.data.p_data = idx ? (uint8_t *)m_beacon_info1 : (uint8_t *) m_beacon_info;
-    manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
-
-    // Build and set advertising data.
-    memset(&advdata, 0, sizeof(advdata));
-
-    advdata.name_type             = BLE_ADVDATA_NO_NAME;
-    advdata.flags                 = flags;
-    advdata.p_manuf_specific_data = &manuf_specific_data;
-
-    err_code = ble_advdata_set(&advdata, NULL);
-    NRF_LOG_INFO("Send button state change. %d\r\n", err_code);
+    set_service_data_bthome_protocol(idx);
+    NRF_LOG_INFO("Send button state change. %d\r\n", idx);
 }
 
 /**@brief Function for doing power management.
