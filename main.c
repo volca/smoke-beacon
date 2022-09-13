@@ -68,7 +68,7 @@
 #define IS_SRVC_CHANGED_CHARACT_PRESENT 0                                 /**< Include or not the service_changed characteristic. if not enabled, the server's database cannot be changed for the lifetime of the device*/
 
 #define APP_CFG_NON_CONN_ADV_TIMEOUT    0                                 /**< Time for which the device must be advertising in non-connectable mode (in seconds). 0 disables timeout. */
-#define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS) /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
+#define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(400, UNIT_0_625_MS) /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
 
 #define APP_BEACON_INFO_LENGTH          0x17                              /**< Total length of information advertised by the Beacon. */
 #define APP_ADV_DATA_LENGTH             0x15                              /**< Length of manufacturer specific data in the advertisement. */
@@ -90,7 +90,9 @@
 #define ADV_TIMEOUT_TIME                APP_TIMER_TICKS(15000, APP_TIMER_PRESCALER)  
 
 #define SERVICE_UUID                    0x181c
-#define SERVICE_DATA_LEN                16
+#define SERVICE_DATA_LEN                10
+
+#define DEVICE_NAME                     "absmk"
 
 APP_TIMER_DEF(m_adv_tmr);
 APP_TIMER_DEF(m_btn_tmr);
@@ -143,6 +145,29 @@ static void set_service_data_bthome_protocol(uint8_t detected)
     m_service_data[1] = 0x29;
     // Value. 1 = detected
     m_service_data[2] = detected;
+    // TODO
+    // 2. Mac
+    // uint18_t.
+    m_service_data[3] = 86;
+    // Value.
+    m_service_data[4] = 0x45;
+    m_service_data[5] = 0xab;
+    m_service_data[6] = 0xcd;
+    m_service_data[7] = 0xef;
+    m_service_data[8] = 0x01;
+    m_service_data[9] = 0x23;
+}
+
+static void gap_params_init() {
+    uint32_t                err_code;
+    ble_gap_conn_sec_mode_t sec_mode;
+
+    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
+
+    err_code = sd_ble_gap_device_name_set(&sec_mode,
+                                          (const uint8_t *)DEVICE_NAME,
+                                          strlen(DEVICE_NAME));
+    APP_ERROR_CHECK(err_code);
 }
 
 /**@brief Function for initializing the Advertising functionality.
@@ -209,8 +234,10 @@ static void ble_stack_init(void)
 }
 
 static void advertising_swap(uint8_t idx) {
+    uint32_t      err_code;
     set_service_data_bthome_protocol(idx);
-    NRF_LOG_INFO("Send button state change. %d\r\n", idx);
+    err_code = ble_advdata_set(&m_adv_data, NULL);
+    NRF_LOG_INFO("Button state:%d err:%d\r\n", idx, err_code);
 }
 
 /**@brief Function for doing power management.
@@ -307,6 +334,7 @@ int main(void)
     app_button_enable();
 
     ble_stack_init();
+    gap_params_init();
     advertising_init();
 
     // Start execution.
