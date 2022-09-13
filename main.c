@@ -141,12 +141,19 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 }
 
 static void nrf51_addr_get(ble_gap_addr_t *gap_addr) {
+    uint32_t addr[2];
+    addr[0] = NRF_FICR->DEVICEADDR[0];
+    addr[1] = NRF_FICR->DEVICEADDR[1];
+    addr[1] |= 0xc000;
+    memcpy(gap_addr->addr, (uint8_t *)addr, 6);
+    /*
     gap_addr->addr[0] = (NRF_FICR->DEVICEADDR[1] >> 8) & 0xFF;
     gap_addr->addr[1] = (NRF_FICR->DEVICEADDR[1]) & 0xFF;
     gap_addr->addr[2] = (NRF_FICR->DEVICEADDR[0] >> 24) & 0xFF;
     gap_addr->addr[3] = (NRF_FICR->DEVICEADDR[0] >> 16) & 0xFF;
     gap_addr->addr[4] = (NRF_FICR->DEVICEADDR[0] >>  8) & 0xFF;
     gap_addr->addr[5] = (NRF_FICR->DEVICEADDR[0] >>  0) & 0xFF;
+    */
 }
 
 static void set_service_data_bthome_protocol(uint8_t detected) 
@@ -165,12 +172,12 @@ static void set_service_data_bthome_protocol(uint8_t detected)
     // Value.
     // BLE_GAP_ADDR_TYPE_PUBLIC
     nrf51_addr_get(&m_gap_addr);
-    m_service_data[4] = m_gap_addr.addr[5];
-    m_service_data[5] = m_gap_addr.addr[4];
-    m_service_data[6] = m_gap_addr.addr[3];
-    m_service_data[7] = m_gap_addr.addr[2];
-    m_service_data[8] = m_gap_addr.addr[1];
-    m_service_data[9] = m_gap_addr.addr[0];
+    m_service_data[4] = m_gap_addr.addr[0];
+    m_service_data[5] = m_gap_addr.addr[1];
+    m_service_data[6] = m_gap_addr.addr[2];
+    m_service_data[7] = m_gap_addr.addr[3];
+    m_service_data[8] = m_gap_addr.addr[4];
+    m_service_data[9] = m_gap_addr.addr[5];
 }
 
 static void gap_params_init() {
