@@ -97,6 +97,10 @@
 APP_TIMER_DEF(m_adv_tmr);
 APP_TIMER_DEF(m_btn_tmr);
 
+static ble_gap_addr_t m_gap_addr = {
+    .addr_type = BLE_GAP_ADDR_TYPE_PUBLIC
+};
+
 static ble_gap_adv_params_t m_adv_params;                                 /**< Parameters to be passed to the stack when starting advertising. */
 
 static uint8_t m_service_data[SERVICE_DATA_LEN];
@@ -136,6 +140,15 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
+static void nrf51_addr_get(ble_gap_addr_t *gap_addr) {
+    gap_addr->addr[0] = (NRF_FICR->DEVICEADDR[1] >> 8) & 0xFF;
+    gap_addr->addr[1] = (NRF_FICR->DEVICEADDR[1]) & 0xFF;
+    gap_addr->addr[2] = (NRF_FICR->DEVICEADDR[0] >> 24) & 0xFF;
+    gap_addr->addr[3] = (NRF_FICR->DEVICEADDR[0] >> 16) & 0xFF;
+    gap_addr->addr[4] = (NRF_FICR->DEVICEADDR[0] >>  8) & 0xFF;
+    gap_addr->addr[5] = (NRF_FICR->DEVICEADDR[0] >>  0) & 0xFF;
+}
+
 static void set_service_data_bthome_protocol(uint8_t detected) 
 {
     // 1. Smoke
@@ -148,14 +161,16 @@ static void set_service_data_bthome_protocol(uint8_t detected)
     // TODO
     // 2. Mac
     // uint18_t.
-    m_service_data[3] = 86;
+    m_service_data[3] = 0x86;
     // Value.
-    m_service_data[4] = 0x45;
-    m_service_data[5] = 0xab;
-    m_service_data[6] = 0xcd;
-    m_service_data[7] = 0xef;
-    m_service_data[8] = 0x01;
-    m_service_data[9] = 0x23;
+    // BLE_GAP_ADDR_TYPE_PUBLIC
+    nrf51_addr_get(&m_gap_addr);
+    m_service_data[4] = m_gap_addr.addr[5];
+    m_service_data[5] = m_gap_addr.addr[4];
+    m_service_data[6] = m_gap_addr.addr[3];
+    m_service_data[7] = m_gap_addr.addr[2];
+    m_service_data[8] = m_gap_addr.addr[1];
+    m_service_data[9] = m_gap_addr.addr[0];
 }
 
 static void gap_params_init() {
